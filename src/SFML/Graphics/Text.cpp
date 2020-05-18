@@ -82,11 +82,10 @@ m_characterSize      (30),
 m_letterSpacingFactor(1.f),
 m_lineSpacingFactor  (1.f),
 m_style              (Regular),
+m_alignment          (Left),
 m_fillColor          (255, 255, 255),
 m_outlineColor       (0, 0, 0),
 m_outlineThickness   (0),
-m_vertices           (Triangles),
-m_outlineVertices    (Triangles),
 m_bounds             (),
 m_geometryNeedUpdate (false),
 m_fontTextureId      (0)
@@ -103,11 +102,10 @@ m_characterSize      (characterSize),
 m_letterSpacingFactor(1.f),
 m_lineSpacingFactor  (1.f),
 m_style              (Regular),
+m_alignment          (Left),
 m_fillColor          (255, 255, 255),
 m_outlineColor       (0, 0, 0),
 m_outlineThickness   (0),
-m_vertices           (Triangles),
-m_outlineVertices    (Triangles),
 m_bounds             (),
 m_geometryNeedUpdate (true),
 m_fontTextureId      (0)
@@ -181,6 +179,15 @@ void Text::setStyle(Uint32 style)
     }
 }
 
+void Text::setAlignment(Uint32 alignment)
+{
+    if (m_alignment != alignment)
+    {
+        m_alignment = alignment;
+        m_geometryNeedUpdate = true;
+    }
+}
+
 
 ////////////////////////////////////////////////////////////
 void Text::setColor(const Color& color)
@@ -200,8 +207,11 @@ void Text::setFillColor(const Color& color)
         // (if geometry is updated anyway, we can skip this step)
         if (!m_geometryNeedUpdate)
         {
-            for (std::size_t i = 0; i < m_vertices.getVertexCount(); ++i)
-                m_vertices[i].color = m_fillColor;
+            for(std::size_t i = 0; i < m_vertices.size(); ++i)
+            {
+                for (std::size_t j = 0; j < m_vertices[i].getVertexCount(); ++j)
+                    m_vertices[i][j].color = m_fillColor;
+            }
         }
     }
 }
@@ -217,9 +227,12 @@ void Text::setOutlineColor(const Color& color)
         // Change vertex colors directly, no need to update whole geometry
         // (if geometry is updated anyway, we can skip this step)
         if (!m_geometryNeedUpdate)
-        {
-            for (std::size_t i = 0; i < m_outlineVertices.getVertexCount(); ++i)
-                m_outlineVertices[i].color = m_outlineColor;
+        {           
+            for(std::size_t i = 0; i < m_outlineVertices.size(); ++i)
+            {
+                for (std::size_t j = 0; j < m_outlineVertices[i].getVertexCount(); ++j)
+                    m_outlineVertices[i][j].color = m_fillColor;
+            }
         }
     }
 }
@@ -275,6 +288,11 @@ float Text::getLineSpacing() const
 Uint32 Text::getStyle() const
 {
     return m_style;
+}
+
+Uint32 Text::getAlignment() const
+{
+    return m_alignment;
 }
 
 
@@ -382,9 +400,12 @@ void Text::draw(RenderTarget& target, RenderStates states) const
 
         // Only draw the outline if there is something to draw
         if (m_outlineThickness != 0)
-            target.draw(m_outlineVertices, states);
-
-        target.draw(m_vertices, states);
+        {
+            for(std::size_t i = 0; i < m_outlineVertices.size(); ++i)
+                target.draw(m_outlineVertices[i], states);
+        }
+        for(std::size_t i = 0; i < m_outlineVertices.size(); ++i)
+            target.draw(m_vertices[i], states);
     }
 }
 
@@ -442,6 +463,14 @@ void Text::ensureGeometryUpdate() const
     float maxX = 0.f;
     float maxY = 0.f;
     Uint32 prevChar = 0;
+
+    // Array containing values of width of text's lines
+    std::vector<float> lineWidth;
+    lineWidth.push_back(0.f);
+
+    m_vertices.push_back(VertexArray(Triangles));
+    m_outlineVertices.push_back(VertexArray(Triangles));
+
     for (std::size_t i = 0; i < m_string.getSize(); ++i)
     {
         Uint32 curChar = m_string[i];
@@ -456,19 +485,19 @@ void Text::ensureGeometryUpdate() const
         // If we're using the underlined style and there's a new line, draw a line
         if (isUnderlined && (curChar == L'\n' && prevChar != L'\n'))
         {
-            addLine(m_vertices, x, y, m_fillColor, underlineOffset, underlineThickness);
+            addLine(m_vertices.back(), x, y, m_fillColor, underlineOffset, underlineThickness);
 
             if (m_outlineThickness != 0)
-                addLine(m_outlineVertices, x, y, m_outlineColor, underlineOffset, underlineThickness, m_outlineThickness);
+                addLine(m_outlineVertices.back(), x, y, m_outlineColor, underlineOffset, underlineThickness, m_outlineThickness);
         }
 
         // If we're using the strike through style and there's a new line, draw a line across all characters
         if (isStrikeThrough && (curChar == L'\n' && prevChar != L'\n'))
         {
-            addLine(m_vertices, x, y, m_fillColor, strikeThroughOffset, underlineThickness);
+            addLine(m_vertices.back(), x, y, m_fillColor, strikeThroughOffset, underlineThickness);
 
             if (m_outlineThickness != 0)
-                addLine(m_outlineVertices, x, y, m_outlineColor, strikeThroughOffset, underlineThickness, m_outlineThickness);
+                addLine(m_outlineVertices.back(), x, y, m_outlineColor, strikeThroughOffset, underlineThickness, m_outlineThickness);
         }
 
         prevChar = curChar;
@@ -484,7 +513,19 @@ void Text::ensureGeometryUpdate() const
             {
                 case L' ':  x += whitespaceWidth;     break;
                 case L'\t': x += whitespaceWidth * 4; break;
-                case L'\n': y += lineSpacing; x = 0;  break;
+                case L'\n':
+
+                    // Save width of the current line
+                    lineWidth.back() = x;
+
+                    // Create vertex arrays for the next line of the text
+                    m_vertices.push_back(VertexArray(Triangles));
+                    m_outlineVertices.push_back(VertexArray(Triangles));
+                    lineWidth.push_back(0);
+
+                    y += lineSpacing;
+                    x = 0;
+                break;
             }
 
             // Update the current bounds (max coordinates)
@@ -506,7 +547,7 @@ void Text::ensureGeometryUpdate() const
             float bottom = glyph.bounds.top  + glyph.bounds.height;
 
             // Add the outline glyph to the vertices
-            addGlyphQuad(m_outlineVertices, Vector2f(x, y), m_outlineColor, glyph, italicShear, m_outlineThickness);
+            addGlyphQuad(m_outlineVertices.back(), Vector2f(x, y), m_outlineColor, glyph, italicShear, m_outlineThickness);
 
             // Update the current bounds with the outlined glyph bounds
             minX = std::min(minX, x + left   - italicShear * bottom - m_outlineThickness);
@@ -519,7 +560,7 @@ void Text::ensureGeometryUpdate() const
         const Glyph& glyph = m_font->getGlyph(curChar, m_characterSize, isBold);
 
         // Add the glyph to the vertices
-        addGlyphQuad(m_vertices, Vector2f(x, y), m_fillColor, glyph, italicShear);
+        addGlyphQuad(m_vertices.back(), Vector2f(x, y), m_fillColor, glyph, italicShear);
 
         // Update the current bounds with the non outlined glyph bounds
         if (m_outlineThickness == 0)
@@ -539,22 +580,25 @@ void Text::ensureGeometryUpdate() const
         x += glyph.advance + letterSpacing;
     }
 
+    // Add the last text's line width
+    lineWidth.back() = x;
+
     // If we're using the underlined style, add the last line
     if (isUnderlined && (x > 0))
     {
-        addLine(m_vertices, x, y, m_fillColor, underlineOffset, underlineThickness);
+        addLine(m_vertices.back(), x, y, m_fillColor, underlineOffset, underlineThickness);
 
         if (m_outlineThickness != 0)
-            addLine(m_outlineVertices, x, y, m_outlineColor, underlineOffset, underlineThickness, m_outlineThickness);
+            addLine(m_outlineVertices.back(), x, y, m_outlineColor, underlineOffset, underlineThickness, m_outlineThickness);
     }
 
     // If we're using the strike through style, add the last line across all characters
     if (isStrikeThrough && (x > 0))
     {
-        addLine(m_vertices, x, y, m_fillColor, strikeThroughOffset, underlineThickness);
+        addLine(m_vertices.back(), x, y, m_fillColor, strikeThroughOffset, underlineThickness);
 
         if (m_outlineThickness != 0)
-            addLine(m_outlineVertices, x, y, m_outlineColor, strikeThroughOffset, underlineThickness, m_outlineThickness);
+            addLine(m_outlineVertices.back(), x, y, m_outlineColor, strikeThroughOffset, underlineThickness, m_outlineThickness);
     }
 
     // Update the bounding rectangle
@@ -562,6 +606,44 @@ void Text::ensureGeometryUpdate() const
     m_bounds.top = minY;
     m_bounds.width = maxX - minX;
     m_bounds.height = maxY - minY;
+
+    // Apply alignment
+    switch (m_alignment)
+    {
+        case Left:
+        // Do nothing, allready aligned
+        break;
+
+        case Center:
+        for(std::size_t i = 0; i < m_vertices.size(); ++i)
+        {
+            if (lineWidth[i] < m_bounds.width)
+            {
+                float offset = (m_bounds.width - lineWidth[i]) / 2;
+                for (std::size_t j = 0; j < m_vertices[i].getVertexCount(); ++j)
+                {
+                    m_vertices[i][j].position.x += offset;
+                    if (m_outlineVertices[i].getVertexCount() > 0) m_outlineVertices[i][j].position.x += offset;
+                }
+            }
+        }
+        break;
+
+        case Right:
+        for(std::size_t i = 0; i < m_vertices.size(); ++i)
+        {
+            if (lineWidth[i] < m_bounds.width)
+            {
+                float offset = m_bounds.width - lineWidth[i];
+                for (std::size_t j = 0; j < m_vertices[i].getVertexCount(); ++j)
+                {
+                    m_vertices[i][j].position.x += offset;
+                    if (m_outlineVertices[i].getVertexCount() > 0) m_outlineVertices[i][j].position.x += offset;
+                }
+            }
+        }
+        break;
+    }
 }
 
 } // namespace sf
