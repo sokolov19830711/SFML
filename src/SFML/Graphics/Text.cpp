@@ -622,8 +622,10 @@ void Text::ensureGeometryUpdate() const
                 float offset = (m_bounds.width - lineWidth[i]) / 2;
                 for (std::size_t j = 0; j < m_vertices[i].getVertexCount(); ++j)
                 {
-                    m_vertices[i][j].position.x += offset;
-                    if (m_outlineVertices[i].getVertexCount() > 0) m_outlineVertices[i][j].position.x += offset;
+//                    m_vertices[i][j].position.x += offset;
+//                    if (m_outlineVertices[i].getVertexCount() > 0) m_outlineVertices[i][j].position.x += offset;
+                    m_vertices[i][j].position.x = static_cast<int> (m_vertices[i][j].position.x + offset);
+                    if (m_outlineVertices[i].getVertexCount() > 0) m_outlineVertices[i][j].position.x = static_cast<int> (m_outlineVertices[i][j].position.x + offset);
                 }
             }
         }
@@ -637,8 +639,10 @@ void Text::ensureGeometryUpdate() const
                 float offset = m_bounds.width - lineWidth[i];
                 for (std::size_t j = 0; j < m_vertices[i].getVertexCount(); ++j)
                 {
-                    m_vertices[i][j].position.x += offset;
-                    if (m_outlineVertices[i].getVertexCount() > 0) m_outlineVertices[i][j].position.x += offset;
+//                    m_vertices[i][j].position.x += offset;
+//                    if (m_outlineVertices[i].getVertexCount() > 0) m_outlineVertices[i][j].position.x += offset;
+                    m_vertices[i][j].position.x = static_cast<int> (m_vertices[i][j].position.x + offset);
+                    if (m_outlineVertices[i].getVertexCount() > 0) m_outlineVertices[i][j].position.x = static_cast<int> (m_outlineVertices[i][j].position.x + offset);
                 }
             }
         }
